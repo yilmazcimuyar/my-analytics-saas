@@ -195,10 +195,13 @@ model Team {
   updatedAt  DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
   deletedAt  DateTime? @map("deleted_at") @db.Timestamptz(6)
 
-  websites Website[]
-  members  TeamUser[]
-  links    Link[]
-  pixels   Pixel[]
+  websites  Website[]
+  members   TeamUser[]
+  links     Link[]
+  pixels    Pixel[]
+  subscription Subscription?
+  branding  TenantBranding?
+  apiKeys   ApiKey[]
 
   @@index([accessCode])
   @@map("team")
@@ -315,4 +318,83 @@ model Pixel {
   @@index([teamId])
   @@index([createdAt])
   @@map("pixel")
+}
+
+// SaaS Multi-Tenant Models
+
+model Subscription {
+  id                String    @id() @unique() @map("subscription_id") @db.Uuid
+  teamId            String    @unique @map("team_id") @db.Uuid
+  plan              String    @db.VarChar(50) @default("HOBBY") // HOBBY, PRO, ENTERPRISE
+  status            String    @db.VarChar(50) @default("ACTIVE") // ACTIVE, CANCELLED, EXPIRED
+  stripeCustomerId  String?   @unique @map("stripe_customer_id") @db.VarChar(255)
+  stripeSubscriptionId String? @unique @map("stripe_subscription_id") @db.VarChar(255)
+  currentPeriodStart DateTime? @map("current_period_start") @db.Timestamptz(6)
+  currentPeriodEnd DateTime?   @map("current_period_end") @db.Timestamptz(6)
+  cancelledAt       DateTime? @map("cancelled_at") @db.Timestamptz(6)
+  createdAt         DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  team Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  usage Usage[]
+
+  @@index([teamId])
+  @@index([stripeCustomerId])
+  @@index([status])
+  @@map("subscription")
+}
+
+model Usage {
+  id              String    @id() @unique() @map("usage_id") @db.Uuid
+  subscriptionId  String    @map("subscription_id") @db.Uuid
+  teamId          String    @map("team_id") @db.Uuid
+  month           Int       @db.Integer // Month (1-12)
+  year            Int       @db.Integer // Year (e.g., 2026)
+  eventCount      BigInt    @default(0) @map("event_count") @db.BigInt
+  limitReached    Boolean   @default(false) @map("limit_reached") @db.Boolean
+  createdAt       DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  subscription Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+
+  @@unique([subscriptionId, year, month])
+  @@index([teamId])
+  @@index([subscriptionId])
+  @@index([year, month])
+  @@map("usage")
+}
+
+model TenantBranding {
+  id              String    @id() @unique() @map("branding_id") @db.Uuid
+  teamId          String    @unique @map("team_id") @db.Uuid
+  logoUrl         String?   @map("logo_url") @db.VarChar(2183)
+  primaryColor    String?   @map("primary_color") @db.VarChar(7) @default("#0066CC")
+  secondaryColor  String?   @map("secondary_color") @db.VarChar(7) @default("#F0F4F8")
+  customDomain    String?   @unique @map("custom_domain") @db.VarChar(255)
+  faviconUrl      String?   @map("favicon_url") @db.VarChar(2183)
+  createdAt       DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  team Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@index([customDomain])
+  @@map("tenant_branding")
+}
+
+model ApiKey {
+  id          String    @id() @unique() @map("api_key_id") @db.Uuid
+  teamId      String    @map("team_id") @db.Uuid
+  name        String    @db.VarChar(100)
+  key         String    @unique @db.VarChar(255)
+  secret      String    @db.VarChar(255)
+  lastUsedAt  DateTime? @map("last_used_at") @db.Timestamptz(6)
+  isActive    Boolean   @default(true) @map("is_active") @db.Boolean
+  createdAt   DateTime? @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime? @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  team Team @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@index([teamId])
+  @@index([key])
+  @@map("api_key")
 }
